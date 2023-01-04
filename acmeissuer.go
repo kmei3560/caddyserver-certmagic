@@ -218,10 +218,24 @@ func NewACMEIssuer(cfg *Config, template ACMEIssuer) *ACMEIssuer {
 	template.config = cfg
 	template.mu = new(sync.Mutex)
 
+	// DEBUG
+	dnsResolverIP := "8.8.8.8:53" // Google DNS resolver.
+	dnsResolverProto := "udp"     // Protocol to use for the DNS resolver
+	dnsResolverTimeoutMs := 5000  // Timeout (ms) for the DNS resolver (optional)
+
 	// set up the dialer and transport / HTTP client
 	dialer := &net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 2 * time.Minute,
+		Resolver: &net.Resolver{ // DEBUG
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+				d := net.Dialer{
+					Timeout: time.Duration(dnsResolverTimeoutMs) * time.Millisecond,
+				}
+				return d.DialContext(ctx, dnsResolverProto, dnsResolverIP)
+			},
+		},
 	}
 	if template.Resolver != "" {
 		dialer.Resolver = &net.Resolver{
@@ -229,6 +243,16 @@ func NewACMEIssuer(cfg *Config, template ACMEIssuer) *ACMEIssuer {
 			Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
 				return (&net.Dialer{
 					Timeout: 15 * time.Second,
+
+					Resolver: &net.Resolver{ // DEBUG
+						PreferGo: true,
+						Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+							d := net.Dialer{
+								Timeout: time.Duration(dnsResolverTimeoutMs) * time.Millisecond,
+							}
+							return d.DialContext(ctx, dnsResolverProto, dnsResolverIP)
+						},
+					},
 				}).DialContext(ctx, network, template.Resolver)
 			},
 		}
